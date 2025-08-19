@@ -15,7 +15,7 @@ export interface EventNotificationData {
   eventDescription?: string;
   startDate: string;
   endDate: string;
-  userEmails: string[]; // Changed from userNames to userEmails
+  userEmails: string[];
   pooledSpacesCount: number;
   companyName: string;
 }
@@ -24,7 +24,7 @@ export interface EventReminderData {
   eventName: string;
   startDate: string;
   endDate: string;
-  userEmail: string; // Single user email
+  userEmail: string;
   userName: string;
   userPooledSpaces: Array<{
     spaceCode: string;
@@ -366,144 +366,4 @@ export async function sendEventReminder(reminderData: EventReminderData) {
 export async function sendWelcomeEmail(userName: string, userEmail: string, companyName?: string) {
   const template = generateWelcomeEmail(userName, userEmail, companyName);
   return await sendEmail(template);
-}The ParkSpace Team</p>
-            </div>
-        </div>
-    </body>
-    </html>
-  `;
-
-  const text = `
-⏰ Event Reminder: ${data.eventName} starts tomorrow!
-
-📅 Dates: ${data.startDate} to ${data.endDate}
-🏢 Company: ${data.companyName}
-
-${data.userPooledSpaces.length > 0 ? 
-  `🅿️ Your Available Parking Spaces: ${data.userPooledSpaces.map(s => s.spaceCode).join(', ')}` : 
-  '🅿️ Parking: Check the app for available spaces'
 }
-
-Reminders for tomorrow:
-- Check your parking space assignment in the app
-- Plan your arrival time accordingly  
-- Contact your team if you have any questions
-
-Open ParkSpace: ${process.env.NEXT_PUBLIC_APP_URL || 'https://your-app.vercel.app'}
-
-See you tomorrow!
-The ParkSpace Team
-  `;
-
-  return {
-    to: [`user@example.com`], // You'll replace with actual user email
-    subject,
-    html,
-    text
-  };
-};
-
-export const generateWelcomeEmail = (userName: string, companyName?: string): EmailTemplate => {
-  const subject = `Welcome to ParkSpace! 🎉`;
-  
-  const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>${subject}</title>
-        <style>
-            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0; background-color: #f8f9fa; }
-            .container { max-width: 600px; margin: 0 auto; background-color: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-            .header { background: linear-gradient(135deg, #28a745, #20c997); color: white; padding: 40px 30px; text-align: center; }
-            .content { padding: 40px 30px; }
-            .cta-button { display: inline-block; background-color: #28a745; color: white; padding: 15px 30px; border-radius: 8px; text-decoration: none; font-weight: bold; }
-            .footer { background-color: #f8f9fa; padding: 30px; text-align: center; color: #6c757d; font-size: 14px; }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <div class="header">
-                <h1>🅿️ Welcome to ParkSpace!</h1>
-                <p>Your parking management solution</p>
-            </div>
-            
-            <div class="content">
-                <h2>Hi ${userName}! 👋</h2>
-                
-                <p>Welcome to ParkSpace - your company's new parking management system!</p>
-                
-                ${companyName ? `<p>You've been added to <strong>${companyName}</strong> and can now:</p>` : '<p>You can now:</p>'}
-                
-                <ul>
-                    <li>🚗 Manage your vehicles</li>
-                    <li>🅿️ View available parking spaces</li>
-                    <li>📅 Get notified about parking events</li>
-                    <li>🏢 Collaborate with your team</li>
-                </ul>
-                
-                <div style="text-align: center; margin: 30px 0;">
-                    <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://your-app.vercel.app'}" class="cta-button">
-                        Get Started
-                    </a>
-                </div>
-                
-                <p>If you have any questions, don't hesitate to reach out!</p>
-            </div>
-            
-            <div class="footer">
-                <p>Best regards,<br>The ParkSpace Team</p>
-            </div>
-        </div>
-    </body>
-    </html>
-  `;
-
-  return {
-    to: [`${userName} <user@example.com>`],
-    subject,
-    html
-  };
-};
-
-// Main email sending functions
-export async function sendEmail(template: EmailTemplate) {
-  try {
-    const { data, error } = await resend.emails.send({
-      from: process.env.FROM_EMAIL || 'ParkSpace <noreply@parkspace.com>',
-      to: template.to,
-      subject: template.subject,
-      html: template.html,
-      text: template.text
-    });
-
-    if (error) {
-      console.error('Error sending email:', error);
-      throw new Error(`Failed to send email: ${error.message}`);
-    }
-
-    console.log('Email sent successfully:', data);
-    return data;
-  } catch (error) {
-    console.error('Email service error:', error);
-    throw error;
-  }
-}
-
-export async function sendEventCreatedNotification(eventData: EventNotificationData) {
-  const template = generateEventCreatedEmail(eventData);
-  return await sendEmail(template);
-}
-
-export async function sendEventReminder(reminderData: EventReminderData) {
-  const template = generateEventReminderEmail(reminderData);
-  return await sendEmail(template);
-}
-
-export async function sendWelcomeEmail(userName: string, companyName?: string) {
-  const template = generateWelcomeEmail(userName, companyName);
-  return await sendEmail(template);
-}
-
-// Function to schedule email

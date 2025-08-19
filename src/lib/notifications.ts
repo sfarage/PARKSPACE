@@ -54,7 +54,7 @@ export async function scheduleEventNotifications(eventId: number) {
     })
 
     // For each company, get users and schedule notifications
-    for (const [companyId, companyData] of companiesMap) {
+    for (const [companyId, companyData] of Array.from(companiesMap)) {
       // Get company users
       const { data: users, error: usersError } = await supabase
         .from('user_profiles')
@@ -73,7 +73,7 @@ export async function scheduleEventNotifications(eventId: number) {
           eventDescription: event.description || undefined,
           startDate: event.start_date,
           endDate: event.end_date,
-          userNames: users.map(u => u.name),
+          userEmails: users.map(u => u.email),
           pooledSpacesCount: companyData.spaces.length,
           companyName: companyData.company.name
         })
@@ -164,6 +164,8 @@ export async function processPendingNotifications() {
               eventName: notification.email_content.eventName,
               startDate: notification.email_content.startDate,
               endDate: notification.email_content.endDate,
+              userEmail: notification.recipient_email,
+              userName: notification.email_content.userName || 'User',
               companyName: notification.email_content.companyName,
               userPooledSpaces: notification.email_content.userPooledSpaces || []
             })
