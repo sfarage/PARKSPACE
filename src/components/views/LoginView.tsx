@@ -1,44 +1,28 @@
 import React, { useState } from 'react';
-import { User } from '../../types';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface LoginViewProps {
-  onLogin: (userData: Omit<User, 'id' | 'companyId' | 'status' | 'createdAt' | 'invitedBy' | 'lastActiveAt'>) => void;
+  // No longer need onLogin prop since auth is handled by context
 }
 
-export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
+export const LoginView: React.FC<LoginViewProps> = () => {
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
+  const [error, setError] = useState('');
+  const { signIn, loading } = useAuth();
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (!loginEmail.trim() || !loginPassword.trim()) {
-      alert('Please enter both email and password');
+      setError('Please enter both email and password');
       return;
     }
 
-    // Demo user credentials
-    const demoUsers = [
-      { email: 'admin@test.com', password: 'admin123', name: 'Global Admin', role: 'global_admin' as const },
-      { email: 'company@test.com', password: 'company123', name: 'Company Admin', role: 'company_admin' as const },
-      { email: 'member@test.com', password: 'member123', name: 'Team Member', role: 'member' as const }
-    ];
-
-    const user = demoUsers.find(u => u.email === loginEmail.toLowerCase().trim());
+    setError('');
+    const result = await signIn(loginEmail, loginPassword);
     
-    if (!user) {
-      alert('User not found. Please check your email address.');
-      return;
+    if (result.error) {
+      setError(result.error);
     }
-
-    if (user.password !== loginPassword) {
-      alert('Invalid password. Please try again.');
-      return;
-    }
-
-    onLogin({ 
-      name: user.name, 
-      email: user.email, 
-      role: user.role 
-    });
   };
 
   return (
@@ -107,32 +91,52 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
               outline: 'none',
               transition: 'border-color 0.2s ease'
             }}
-            onKeyPress={(e) => e.key === 'Enter' && handleLogin()}
+            onKeyPress={(e) => e.key === 'Enter' && !loading && handleLogin()}
             onFocus={(e) => e.target.style.borderColor = '#007bff'}
             onBlur={(e) => e.target.style.borderColor = '#e9ecef'}
           />
+          {error && (
+            <div style={{
+              backgroundColor: '#f8d7da',
+              color: '#721c24',
+              padding: '12px',
+              borderRadius: '6px',
+              marginBottom: '15px',
+              fontSize: '14px',
+              border: '1px solid #f5c6cb'
+            }}>
+              {error}
+            </div>
+          )}
+          
           <button 
-            onClick={handleLogin} 
+            onClick={handleLogin}
+            disabled={loading}
             style={{ 
               width: '100%',
               padding: '15px',
-              backgroundColor: '#007bff',
+              backgroundColor: loading ? '#6c757d' : '#007bff',
               color: 'white',
               border: 'none',
               borderRadius: '8px',
-              cursor: 'pointer',
+              cursor: loading ? 'not-allowed' : 'pointer',
               fontSize: '18px',
               fontWeight: 'bold',
-              transition: 'background-color 0.2s ease'
+              transition: 'background-color 0.2s ease',
+              opacity: loading ? 0.7 : 1
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = '#0056b3';
+              if (!loading) {
+                e.currentTarget.style.backgroundColor = '#0056b3';
+              }
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = '#007bff';
+              if (!loading) {
+                e.currentTarget.style.backgroundColor = '#007bff';
+              }
             }}
           >
-            Sign In
+            {loading ? 'Signing in...' : 'Sign In'}
           </button>
         </div>
         
@@ -146,12 +150,9 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
         }}>
           <p style={{ fontWeight: 'bold', margin: '0 0 10px 0', color: '#495057' }}>Demo Accounts:</p>
           <div style={{ textAlign: 'left', fontSize: '13px' }}>
-            <p style={{ margin: '5px 0' }}>🔑 <strong>Global Admin:</strong></p>
+            <p style={{ margin: '5px 0' }}>🔑 <strong>Admin Login:</strong></p>
             <p style={{ margin: '2px 0 8px 20px' }}>Email: <code>admin@test.com</code> | Password: <code>admin123</code></p>
-            <p style={{ margin: '5px 0' }}>🏢 <strong>Company Admin:</strong></p>
-            <p style={{ margin: '2px 0 8px 20px' }}>Email: <code>company@test.com</code> | Password: <code>company123</code></p>
-            <p style={{ margin: '5px 0' }}>👤 <strong>Team Member:</strong></p>
-            <p style={{ margin: '2px 0 0px 20px' }}>Email: <code>member@test.com</code> | Password: <code>member123</code></p>
+            <p style={{ margin: '8px 0 5px 0', fontSize: '12px', fontStyle: 'italic', color: '#6c757d' }}>* Other users can be created by administrators</p>
           </div>
         </div>
       </div>

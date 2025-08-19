@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { User, Company } from '../../types';
+import { ExtendedUser } from '../../types/auth';
 import { Modal } from '../Modal';
 
 const Icons = {
@@ -31,18 +32,15 @@ const UserStatuses = [
   { value: 'suspended', label: 'Suspended', icon: '❌' }
 ];
 
-interface ExtendedUser extends User {
-  lastActivity: string;
-  joinedAt: string;
-}
+// Using shared ExtendedUser from types/auth
 
 interface UsersViewProps {
   currentUser: User;
   users: ExtendedUser[];
   companies: Company[];
   onAddUser: (userData: Omit<ExtendedUser, 'id'>) => void;
-  onEditUser: (userId: number, userData: Partial<ExtendedUser>) => void;
-  onDeleteUser: (userId: number) => void;
+  onEditUser: (userId: string, userData: Partial<ExtendedUser>) => void;
+  onDeleteUser: (userId: string) => void;
   onExportUsersCSV: () => void;
 }
 
@@ -108,7 +106,7 @@ export const UsersView: React.FC<UsersViewProps> = ({
                  currentUser.role === 'company_admin' ? 1 : null,
       status: userStatus as ExtendedUser['status'],
       createdAt: new Date().toISOString(),
-      invitedBy: 1, // Will be currentUser.id
+      invitedBy: currentUser.id.toString(),
       lastActiveAt: null,
       lastActivity: new Date().toISOString().split('T')[0],
       joinedAt: new Date().toISOString().split('T')[0]
@@ -149,7 +147,7 @@ export const UsersView: React.FC<UsersViewProps> = ({
 
   const handleEditClick = (user: ExtendedUser) => {
     // Prevent editing self
-    if (user.id === 1) { // Will be currentUser.id
+    if (user.id === currentUser.id.toString()) {
       alert('You cannot edit your own account');
       return;
     }
@@ -163,9 +161,9 @@ export const UsersView: React.FC<UsersViewProps> = ({
     setShowEditModal(true);
   };
 
-  const handleDeleteUser = (userId: number, userName: string) => {
+  const handleDeleteUser = (userId: string, userName: string) => {
     // Prevent deleting self
-    if (userId === 1) { // Will be currentUser.id
+    if (userId === currentUser.id.toString()) {
       alert('You cannot delete your own account');
       return;
     }
@@ -181,7 +179,7 @@ export const UsersView: React.FC<UsersViewProps> = ({
 
     // Role-based filtering
     if (currentUser.role === 'company_admin') {
-      filtered = users.filter(u => u.companyId === 1); // Will be currentUser.companyId
+      filtered = users.filter(u => u.companyId === currentUser.companyId);
     }
 
     // Search filter
@@ -616,7 +614,7 @@ export const UsersView: React.FC<UsersViewProps> = ({
                 </div>
                 
                 {/* Action Buttons */}
-                {user.id !== 1 && ( // Don't show actions for current user
+                {user.id !== currentUser.id.toString() && ( // Don't show actions for current user
                   <div style={{ display: 'flex', gap: '8px', marginLeft: '15px' }}>
                     <button
                       onClick={() => handleEditClick(user)}
