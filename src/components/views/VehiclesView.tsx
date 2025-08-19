@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { User, Vehicle, Company } from '../../types';
+import { User, Vehicle, Space, Company } from '../../types';
 import { Modal } from '../Modal';
+import { AssignVehicleToSpace, UnassignVehicle } from '../VehicleSpaceAssignment';
 
 const Icons = {
   plus: '➕',
@@ -15,7 +16,9 @@ const Icons = {
   van: '🚐',
   motorcycle: '🏍️',
   electric: '⚡',
-  hybrid: '🔋'
+  hybrid: '🔋',
+  parking: '🅿️',
+  unassign: '🔓'
 };
 
 const VehicleTypes = [
@@ -36,24 +39,32 @@ const VehicleColors = [
 interface VehiclesViewProps {
   currentUser: User;
   vehicles: Vehicle[];
+  spaces: Space[];
   companies: Company[];
   onAddVehicle: (vehicleData: Omit<Vehicle, 'id'>) => void;
   onEditVehicle: (vehicleId: number, vehicleData: Partial<Vehicle>) => void;
   onDeleteVehicle: (vehicleId: number) => void;
   onExportVehiclesCSV: () => void;
+  onAssignVehicleToSpace: (vehicleId: number, spaceId: number, notes?: string) => Promise<void>;
+  onUnassignVehicleFromSpace: (assignmentId: number, notes?: string) => Promise<void>;
 }
 
 export const VehiclesView: React.FC<VehiclesViewProps> = ({
   currentUser,
   vehicles,
+  spaces,
   companies,
   onAddVehicle,
   onEditVehicle,
   onDeleteVehicle,
-  onExportVehiclesCSV
+  onExportVehiclesCSV,
+  onAssignVehicleToSpace,
+  onUnassignVehicleFromSpace
 }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [showUnassignModal, setShowUnassignModal] = useState(false);
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
@@ -516,59 +527,149 @@ export const VehiclesView: React.FC<VehiclesViewProps> = ({
                       📅 Added: {vehicle.addedAt}
                     </p>
                     {currentUser.role === 'global_admin' && (
-                      <p style={{ margin: '0', color: '#6c757d', fontSize: '14px' }}>
+                      <p style={{ margin: '0 0 8px 0', color: '#6c757d', fontSize: '14px' }}>
                         🏢 Company: {getCompanyName(vehicle.companyId)}
                       </p>
+                    )}
+                    
+                    {/* Parking Assignment Status */}
+                    {vehicle.currentAssignment ? (
+                      <div style={{ 
+                        margin: '0', 
+                        padding: '8px 12px',
+                        backgroundColor: '#d4edda',
+                        border: '1px solid #c3e6cb',
+                        borderRadius: '6px',
+                        fontSize: '14px'
+                      }}>
+                        <p style={{ margin: '0 0 4px 0', color: '#155724', fontWeight: 'bold' }}>
+                          {Icons.parking} Assigned to: {vehicle.currentAssignment.spaceCode}
+                        </p>
+                        <p style={{ margin: '0', color: '#6c757d', fontSize: '12px' }}>
+                          Since: {new Date(vehicle.currentAssignment.assignedAt).toLocaleDateString()}
+                        </p>
+                      </div>
+                    ) : (
+                      <div style={{ 
+                        margin: '0',
+                        padding: '8px 12px',
+                        backgroundColor: '#f8f9fa',
+                        border: '1px solid #dee2e6',
+                        borderRadius: '6px',
+                        fontSize: '14px',
+                        color: '#6c757d'
+                      }}>
+                        No parking space assigned
+                      </div>
                     )}
                   </div>
                 </div>
                 
                 {/* Action Buttons */}
-                <div style={{ display: 'flex', gap: '8px', marginLeft: '15px' }}>
-                  <button
-                    onClick={() => handleEditClick(vehicle)}
-                    style={{
-                      padding: '10px',
-                      backgroundColor: '#007bff',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      fontSize: '14px',
-                      transition: 'background-color 0.2s ease'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = '#0056b3';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = '#007bff';
-                    }}
-                    title="Edit Vehicle"
-                  >
-                    {Icons.edit}
-                  </button>
-                  <button
-                    onClick={() => handleDeleteVehicle(vehicle.id, vehicle.plate)}
-                    style={{
-                      padding: '10px',
-                      backgroundColor: '#dc3545',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      fontSize: '14px',
-                      transition: 'background-color 0.2s ease'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = '#c82333';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = '#dc3545';
-                    }}
-                    title="Delete Vehicle"
-                  >
-                    {Icons.trash}
-                  </button>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginLeft: '15px' }}>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      onClick={() => handleEditClick(vehicle)}
+                      style={{
+                        padding: '10px',
+                        backgroundColor: '#007bff',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontSize: '14px',
+                        transition: 'background-color 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = '#0056b3';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = '#007bff';
+                      }}
+                      title="Edit Vehicle"
+                    >
+                      {Icons.edit}
+                    </button>
+                    <button
+                      onClick={() => handleDeleteVehicle(vehicle.id, vehicle.plate)}
+                      style={{
+                        padding: '10px',
+                        backgroundColor: '#dc3545',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontSize: '14px',
+                        transition: 'background-color 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = '#c82333';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = '#dc3545';
+                      }}
+                      title="Delete Vehicle"
+                    >
+                      {Icons.trash}
+                    </button>
+                  </div>
+                  
+                  {/* Parking Assignment Buttons */}
+                  {vehicle.currentAssignment ? (
+                    <button
+                      onClick={() => {
+                        setSelectedVehicle(vehicle);
+                        setShowUnassignModal(true);
+                      }}
+                      style={{
+                        padding: '8px 12px',
+                        backgroundColor: '#ffc107',
+                        color: '#212529',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontSize: '12px',
+                        fontWeight: 'bold',
+                        transition: 'background-color 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = '#e0a800';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = '#ffc107';
+                      }}
+                      title="Remove parking assignment"
+                    >
+                      {Icons.unassign} Unassign
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setSelectedVehicle(vehicle);
+                        setShowAssignModal(true);
+                      }}
+                      style={{
+                        padding: '8px 12px',
+                        backgroundColor: '#28a745',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontSize: '12px',
+                        fontWeight: 'bold',
+                        transition: 'background-color 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = '#218838';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = '#28a745';
+                      }}
+                      title="Assign to parking space"
+                    >
+                      {Icons.parking} Assign
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -578,25 +679,21 @@ export const VehiclesView: React.FC<VehiclesViewProps> = ({
         <div style={{ 
           textAlign: 'center', 
           padding: '80px',
-          backgroundColor: 'white',
+          border: '2px dashed #dee2e6',
           borderRadius: '12px',
-          border: '2px dashed #dee2e6'
+          backgroundColor: '#f8f9fa'
         }}>
           <div style={{ fontSize: '48px', marginBottom: '20px' }}>{Icons.car}</div>
-          <h3 style={{ color: '#6c757d', margin: '0 0 10px 0' }}>
-            {searchTerm || typeFilter || companyFilter ? 'No vehicles found' : 'No vehicles yet'}
-          </h3>
+          <h3 style={{ color: '#6c757d', margin: '0 0 10px 0' }}>No vehicles found</h3>
           <p style={{ color: '#adb5bd', margin: '0 0 20px 0' }}>
-            {searchTerm || typeFilter || companyFilter ? 
-              'Try adjusting your search or filters' :
-              'Add your first vehicle to get started'}
+            {getFilteredVehicles().length === 0 ? 'No vehicles registered yet' : 'Try adjusting your search or filters'}
           </p>
-          {!searchTerm && !typeFilter && !companyFilter && (
+          {currentUser.role !== 'member' && getFilteredVehicles().length === 0 && (
             <button
               onClick={() => setShowAddModal(true)}
               style={{
                 padding: '12px 24px',
-                backgroundColor: '#28a745',
+                backgroundColor: '#007bff',
                 color: 'white',
                 border: 'none',
                 borderRadius: '8px',
@@ -610,6 +707,8 @@ export const VehiclesView: React.FC<VehiclesViewProps> = ({
           )}
         </div>
       )}
+      
+      {/* Modals */}
 
       {/* Add Vehicle Modal */}
       <Modal
@@ -1092,6 +1191,32 @@ export const VehiclesView: React.FC<VehiclesViewProps> = ({
           </button>
         </div>
       </Modal>
+
+      {/* Vehicle Assignment Modal */}
+      {showAssignModal && selectedVehicle && (
+        <AssignVehicleToSpace
+          vehicles={vehicles}
+          spaces={spaces}
+          preselectedVehicleId={selectedVehicle.id}
+          onAssign={onAssignVehicleToSpace}
+          onClose={() => {
+            setShowAssignModal(false);
+            setSelectedVehicle(null);
+          }}
+        />
+      )}
+
+      {/* Vehicle Unassignment Modal */}
+      {showUnassignModal && selectedVehicle?.currentAssignment && (
+        <UnassignVehicle
+          assignment={selectedVehicle.currentAssignment}
+          onUnassign={onUnassignVehicleFromSpace}
+          onClose={() => {
+            setShowUnassignModal(false);
+            setSelectedVehicle(null);
+          }}
+        />
+      )}
     </div>
   );
 };

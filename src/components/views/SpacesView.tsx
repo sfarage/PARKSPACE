@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { User, Space, Company } from '../../types';
+import { User, Space, Vehicle, Company } from '../../types';
 import { Modal } from '../Modal';
+import { AssignVehicleToSpace, UnassignVehicle } from '../VehicleSpaceAssignment';
 
 const Icons = {
   plus: '➕',
@@ -8,30 +9,40 @@ const Icons = {
   assign: '🔗',
   edit: '✏️',
   trash: '🗑️',
-  grid: '📱'
+  grid: '📱',
+  car: '🚗',
+  unassign: '🔓'
 };
 
 interface SpacesViewProps {
   currentUser: User;
   spaces: Space[];
+  vehicles: Vehicle[];
   companies: Company[];
   onAddSpace: (spaceData: Omit<Space, 'id'>) => void;
   onAddBulkSpaces: (rangeStart: string, rangeEnd: string, companyId: number | null) => void;
   onAssignSpace: (spaceId: number, companyId: number | null) => void;
   onDeleteSpace: (spaceId: number) => void;
+  onAssignVehicleToSpace: (vehicleId: number, spaceId: number, notes?: string) => Promise<void>;
+  onUnassignVehicleFromSpace: (assignmentId: number, notes?: string) => Promise<void>;
 }
 
 export const SpacesView: React.FC<SpacesViewProps> = ({
   currentUser,
   spaces,
+  vehicles,
   companies,
   onAddSpace,
   onAddBulkSpaces,
   onAssignSpace,
-  onDeleteSpace
+  onDeleteSpace,
+  onAssignVehicleToSpace,
+  onUnassignVehicleFromSpace
 }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(false);
+  const [showVehicleAssignModal, setShowVehicleAssignModal] = useState(false);
+  const [showVehicleUnassignModal, setShowVehicleUnassignModal] = useState(false);
   const [selectedSpace, setSelectedSpace] = useState<Space | null>(null);
   const [creationType, setCreationType] = useState<'single' | 'bulk'>('single');
   
@@ -352,29 +363,114 @@ export const SpacesView: React.FC<SpacesViewProps> = ({
                 {/* Space Code */}
                 <div style={{ fontSize: '16px', fontWeight: 'bold' }}>{space.code}</div>
                 
-                {/* Company Name - Only for Global Admin */}
-                {space.companyId && currentUser.role === 'global_admin' && (
-                  <div style={{ 
-                    fontSize: '10px', 
-                    opacity: 0.9, 
-                    marginTop: '4px',
-                    lineHeight: '1.2'
-                  }}>
-                    {companies.find(c => c.id === space.companyId)?.name?.slice(0, 10)}
-                    {companies.find(c => c.id === space.companyId)?.name && companies.find(c => c.id === space.companyId)!.name.length > 10 && '...'}
-                  </div>
-                )}
-                
-                {/* Click to assign hint - Only for Global Admin on unassigned spaces */}
-                {!space.companyId && currentUser.role === 'global_admin' && (
-                  <div style={{ 
-                    fontSize: '9px', 
-                    opacity: 0.7, 
-                    marginTop: '4px',
-                    fontStyle: 'italic'
-                  }}>
-                    Click to assign
-                  </div>
+                {/* Vehicle Assignment Status */}
+                {space.currentAssignment ? (
+                  <>
+                    <div style={{ 
+                      fontSize: '10px', 
+                      color: '#28a745',
+                      marginTop: '2px',
+                      fontWeight: 'bold'
+                    }}>
+                      {Icons.car} {space.currentAssignment.vehiclePlate}
+                    </div>
+                    <div style={{ 
+                      fontSize: '8px', 
+                      opacity: 0.8, 
+                      marginTop: '1px'
+                    }}>
+                      {space.currentAssignment.vehicleDescription?.slice(0, 12)}
+                      {space.currentAssignment.vehicleDescription && space.currentAssignment.vehicleDescription.length > 12 && '...'}
+                    </div>
+                    {/* Unassign button */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedSpace(space);
+                        setShowVehicleUnassignModal(true);
+                      }}
+                      style={{
+                        position: 'absolute',
+                        bottom: '2px',
+                        right: '2px',
+                        backgroundColor: '#ffc107',
+                        color: '#212529',
+                        border: 'none',
+                        borderRadius: '3px',
+                        fontSize: '8px',
+                        padding: '2px 4px',
+                        cursor: 'pointer',
+                        opacity: 0.8
+                      }}
+                      title="Remove vehicle"
+                    >
+                      {Icons.unassign}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    {/* Company Name - Only for Global Admin */}
+                    {space.companyId && currentUser.role === 'global_admin' && (
+                      <div style={{ 
+                        fontSize: '10px', 
+                        opacity: 0.9, 
+                        marginTop: '4px',
+                        lineHeight: '1.2'
+                      }}>
+                        {companies.find(c => c.id === space.companyId)?.name?.slice(0, 10)}
+                        {companies.find(c => c.id === space.companyId)?.name && companies.find(c => c.id === space.companyId)!.name.length > 10 && '...'}
+                      </div>
+                    )}
+                    
+                    <div style={{ 
+                      fontSize: '9px', 
+                      opacity: 0.7, 
+                      marginTop: '4px',
+                      fontStyle: 'italic',
+                      color: space.status === 'available' ? '#28a745' : '#6c757d'
+                    }}>
+                      {space.status === 'available' ? 'Available' : space.status}
+                    </div>
+                    
+                    {/* Assign vehicle button for available spaces */}
+                    {space.status === 'available' && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedSpace(space);
+                          setShowVehicleAssignModal(true);
+                        }}
+                        style={{
+                          position: 'absolute',
+                          bottom: '2px',
+                          right: '2px',
+                          backgroundColor: '#28a745',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '3px',
+                          fontSize: '8px',
+                          padding: '2px 4px',
+                          cursor: 'pointer',
+                          opacity: 0.8
+                        }}
+                        title="Assign vehicle"
+                      >
+                        {Icons.car}
+                      </button>
+                    )}
+                    
+                    {/* Click to assign hint - Only for Global Admin on unassigned spaces */}
+                    {!space.companyId && currentUser.role === 'global_admin' && (
+                      <div style={{ 
+                        fontSize: '9px', 
+                        opacity: 0.7, 
+                        marginTop: '4px',
+                        fontStyle: 'italic'
+                      }}>
+                        Click to assign
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             ))}
@@ -687,6 +783,32 @@ export const SpacesView: React.FC<SpacesViewProps> = ({
           </button>
         </div>
       </Modal>
+
+      {/* Vehicle Assignment Modal */}
+      {showVehicleAssignModal && selectedSpace && (
+        <AssignVehicleToSpace
+          vehicles={vehicles}
+          spaces={spaces}
+          preselectedSpaceId={selectedSpace.id}
+          onAssign={onAssignVehicleToSpace}
+          onClose={() => {
+            setShowVehicleAssignModal(false);
+            setSelectedSpace(null);
+          }}
+        />
+      )}
+
+      {/* Vehicle Unassignment Modal */}
+      {showVehicleUnassignModal && selectedSpace?.currentAssignment && (
+        <UnassignVehicle
+          assignment={selectedSpace.currentAssignment}
+          onUnassign={onUnassignVehicleFromSpace}
+          onClose={() => {
+            setShowVehicleUnassignModal(false);
+            setSelectedSpace(null);
+          }}
+        />
+      )}
     </div>
   );
 };

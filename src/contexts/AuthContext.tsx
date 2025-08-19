@@ -103,6 +103,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (data.user) {
         const profile = await getUserProfile(data.user);
+        
         if (profile) {
           setUser(profile);
           

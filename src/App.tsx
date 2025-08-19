@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Company, Space, Vehicle, Event, EventPool, ViewType } from './types';
+import { Company, Space, Vehicle, Event, EventPool, VehicleSpaceAssignment, ViewType } from './types';
 import { ExtendedUser } from './types/auth';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { Navigation } from './components/Navigation';
@@ -9,7 +9,7 @@ import { SpacesView } from './components/views/SpacesView';
 import { VehiclesView } from './components/views/VehiclesView';
 import { UsersView } from './components/views/UsersView';
 import { EventsView } from './components/views/EventsView';
-import { supabase } from './lib/supabase';
+import { supabase, getVehicleSpaceAssignments, assignVehicleToSpace, unassignVehicleFromSpace } from './lib/supabase';
 
 function AppContent() {
   const { user, loading, signOut } = useAuth();
@@ -22,6 +22,7 @@ function AppContent() {
   const [users, setUsers] = useState<ExtendedUser[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
   const [eventPools, setEventPools] = useState<EventPool[]>([]);
+  const [, setAssignments] = useState<VehicleSpaceAssignment[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
 
   // Load data from Supabase
@@ -69,6 +70,9 @@ function AppContent() {
       const { data: eventPoolsData } = await supabase
         .from('event_pools')
         .select('*');
+      
+      // Load vehicle space assignments
+      const assignmentsData = await getVehicleSpaceAssignments();
 
       // Transform data to match existing interfaces
       setCompanies(companiesData?.map(c => ({
@@ -79,27 +83,55 @@ function AppContent() {
         spaceCount: c.space_count || 0
       })) || []);
 
-      setSpaces(spacesData?.map(s => ({
-        id: s.id,
-        code: s.code,
-        block: s.block,
-        number: s.number,
-        companyId: s.company_id,
-        assignedAt: s.assigned_at,
-        status: s.status
-      })) || []);
+      // Transform assignments data
+      const assignmentsTransformed: VehicleSpaceAssignment[] = assignmentsData?.map(a => ({
+        id: a.assignment_id,
+        vehicleId: a.vehicle_id,
+        spaceId: a.space_id,
+        assignedAt: a.assigned_at,
+        assignedBy: a.assigned_by,
+        notes: a.notes,
+        status: 'active',
+        endedAt: null,
+        endedBy: null,
+        vehiclePlate: a.vehicle_plate,
+        vehicleDescription: a.vehicle_description,
+        spaceCode: a.space_code,
+        assignedByName: a.assigned_by_name,
+        companyName: a.company_name
+      })) || [];
 
-      setVehicles(vehiclesData?.map(v => ({
-        id: v.id,
-        plate: v.plate,
-        make: v.make,
-        model: v.model,
-        color: v.color,
-        type: v.type,
-        userId: parseInt(v.user_id),
-        companyId: v.company_id,
-        addedAt: v.added_at
-      })) || []);
+      setAssignments(assignmentsTransformed);
+
+      setSpaces(spacesData?.map(s => {
+        const assignment = assignmentsTransformed.find(a => a.spaceId === s.id);
+        return {
+          id: s.id,
+          code: s.code,
+          block: s.block,
+          number: s.number,
+          companyId: s.company_id,
+          assignedAt: s.assigned_at,
+          status: s.status,
+          currentAssignment: assignment
+        };
+      }) || []);
+
+      setVehicles(vehiclesData?.map(v => {
+        const assignment = assignmentsTransformed.find(a => a.vehicleId === v.id);
+        return {
+          id: v.id,
+          plate: v.plate,
+          make: v.make,
+          model: v.model,
+          color: v.color,
+          type: v.type,
+          userId: parseInt(v.user_id),
+          companyId: v.company_id,
+          addedAt: v.added_at,
+          currentAssignment: assignment
+        };
+      }) || []);
 
       setUsers(usersData?.map(u => ({
         id: u.id,
@@ -312,6 +344,31 @@ function AppContent() {
     console.log('CSV export not yet implemented');
   };
 
+  // Vehicle Space Assignment handlers
+  const handleAssignVehicleToSpace = async (vehicleId: number, spaceId: number, notes?: string) => {
+    try {
+      await assignVehicleToSpace(vehicleId, spaceId, notes);
+      
+      // Reload data to get updated assignments and space statuses
+      await loadData();
+    } catch (error) {
+      console.error('Error assigning vehicle to space:', error);
+      throw error; // Re-throw to let the UI component handle the error
+    }
+  };
+
+  const handleUnassignVehicleFromSpace = async (assignmentId: number, notes?: string) => {
+    try {
+      await unassignVehicleFromSpace(assignmentId, notes);
+      
+      // Reload data to get updated assignments and space statuses
+      await loadData();
+    } catch (error) {
+      console.error('Error unassigning vehicle from space:', error);
+      throw error; // Re-throw to let the UI component handle the error
+    }
+  };
+
   // Show loading screen
   if (loading) {
     return (
@@ -404,22 +461,28 @@ function AppContent() {
           <SpacesView
             currentUser={currentUser}
             spaces={spaces}
+            vehicles={vehicles}
             companies={companies}
             onAddSpace={handleAddSpace}
             onAddBulkSpaces={handleAddBulkSpaces}
             onAssignSpace={handleAssignSpace}
             onDeleteSpace={handleDeleteSpace}
+            onAssignVehicleToSpace={handleAssignVehicleToSpace}
+            onUnassignVehicleFromSpace={handleUnassignVehicleFromSpace}
           />
         )}
         {currentView === 'vehicles' && (
           <VehiclesView 
             currentUser={currentUser}
             vehicles={vehicles}
+            spaces={spaces}
             companies={companies}
             onAddVehicle={handleAddVehicle}
             onEditVehicle={handleEditVehicle}
             onDeleteVehicle={handleDeleteVehicle}
             onExportVehiclesCSV={handleExportVehiclesCSV}
+            onAssignVehicleToSpace={handleAssignVehicleToSpace}
+            onUnassignVehicleFromSpace={handleUnassignVehicleFromSpace}
           />
         )}
         {currentView === 'users' && (

@@ -26,6 +26,7 @@ export interface Space {
   companyId: number | null;
   assignedAt: string | null;
   status: 'available' | 'occupied' | 'reserved';
+  currentAssignment?: VehicleSpaceAssignment;
 }
 
 export interface Vehicle {
@@ -38,6 +39,7 @@ export interface Vehicle {
   userId: number;
   companyId: number;
   addedAt: string;
+  currentAssignment?: VehicleSpaceAssignment;
 }
 
 export interface Event {
@@ -58,6 +60,24 @@ export interface EventPool {
   companyId: number;
   pooledBy: number;
   pooledAt: string;
+}
+
+export interface VehicleSpaceAssignment {
+  id: number;
+  vehicleId: number;
+  spaceId: number;
+  assignedAt: string;
+  assignedBy: string | null;
+  notes: string | null;
+  status: 'active' | 'ended';
+  endedAt: string | null;
+  endedBy: string | null;
+  // For joined data
+  vehiclePlate?: string;
+  vehicleDescription?: string;
+  spaceCode?: string;
+  assignedByName?: string;
+  companyName?: string;
 }
 
 export type ViewType = 'companies' | 'spaces' | 'vehicles' | 'users' | 'events';

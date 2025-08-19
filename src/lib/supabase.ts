@@ -4,7 +4,16 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = process.env.REACT_APP_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+// Create a single client instance with proper configuration
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    storage: window.localStorage,
+    storageKey: 'parkspace-auth-v2', // Changed to clear old sessions
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: true
+  }
+})
 
 // Server-side client with service role (for admin operations)
 const supabaseServiceRoleKey = process.env.REACT_APP_SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -393,4 +402,36 @@ export async function deleteVehicle(id: number) {
     .eq('id', id)
 
   if (error) throw error
+}
+
+// Vehicle Space Assignment operations
+export async function getVehicleSpaceAssignments() {
+  const { data, error } = await supabase
+    .from('current_vehicle_assignments')
+    .select('*')
+    .order('assigned_at', { ascending: false })
+
+  if (error) throw error
+  return data
+}
+
+export async function assignVehicleToSpace(vehicleId: number, spaceId: number, notes?: string) {
+  const { data, error } = await supabase.rpc('assign_vehicle_to_space', {
+    p_vehicle_id: vehicleId,
+    p_space_id: spaceId,
+    p_notes: notes || null
+  })
+
+  if (error) throw error
+  return data
+}
+
+export async function unassignVehicleFromSpace(assignmentId: number, notes?: string) {
+  const { data, error } = await supabase.rpc('unassign_vehicle_from_space', {
+    p_assignment_id: assignmentId,
+    p_notes: notes || null
+  })
+
+  if (error) throw error
+  return data
 }
