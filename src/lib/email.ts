@@ -1,8 +1,5 @@
 // src/lib/email.ts
-import { Resend } from 'resend';
-
-const resend = new Resend(process.env.RESEND_API_KEY);
-const IS_DRY_RUN = process.env.EMAIL_DRY_RUN === 'true';
+const isBrowser = typeof window !== 'undefined';
 
 export interface EmailTemplate {
   to: string[];
@@ -349,34 +346,25 @@ export const generateWelcomeEmail = (userName: string, userEmail: string, compan
 
 // Main email sending functions
 export async function sendEmail(template: EmailTemplate) {
-  try {
-    if (IS_DRY_RUN) {
-      console.log('🧪 DRY RUN — would send:', {
-        from: process.env.FROM_EMAIL || 'ParkSpace <onboarding@resend.dev>',
-        to: template.to,
-        subject: template.subject,
-        hasHtml: !!template.html,
-        hasText: !!template.text
-      });
-      return { data: null };
-    }
-
-    const { data, error } = await resend.emails.send({
-      from: process.env.FROM_EMAIL || 'ParkSpace <cbv.parking@yakel.co.uk>',
-      replyTo: process.env.SUPPORT_EMAIL || 'cbv.parking@yakel.co.uk',
-      to: template.to,
-      subject: template.subject,
-      html: template.html,
-      text: template.text
+  if (isBrowser) {
+    // Call our Pages Function (uses server-side Resend key)
+    const res = await fetch('/api/send-email', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(template),
     });
-
-    if (error) throw new Error(error.message);
-    console.log('Email sent:', data);
-    return data;
-  } catch (e) {
-    console.error('Email service error:', e);
-    throw e;
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(`Email API error: ${err?.error || res.statusText}`);
+    }
+    return await res.json();
   }
+
+  // if (!isBrowser) {
+  //   const { Resend } = await import('resend');
+  //   const resend = new Resend(process.env.RESEND_API_KEY!);
+  //   return await resend.emails.send({ ... });
+  // }
 }
 
 export async function sendEventCreatedNotification(eventData: EventNotificationData) {
