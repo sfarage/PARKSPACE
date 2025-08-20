@@ -1,9 +1,16 @@
 // lib/notifications.ts
-import { supabase, supabaseAdmin } from './supabase'
+import { supabase, adminSupabase } from './supabase'
 import { sendEventCreatedNotification, sendEventReminder, sendWelcomeEmail } from './email'
+
+const isBrowser = typeof window !== 'undefined';
 
 // Schedule email notifications for an event
 export async function scheduleEventNotifications(eventId: number) {
+  if (isBrowser) {
+    console.warn('Email/privileged ops are server-only; skipping in browser.');
+    return;
+  }
+  
   try {
     // Get event details
     const { data: event, error: eventError } = await supabase
@@ -69,11 +76,11 @@ export async function scheduleEventNotifications(eventId: number) {
       // Send immediate event creation notification
       try {
         await sendEventCreatedNotification({
-          eventName: event.name,
-          eventDescription: event.description || undefined,
-          startDate: event.start_date,
-          endDate: event.end_date,
-          userEmails: users.map(u => u.email),
+          eventName: event.name as string,
+          eventDescription: (event.description as string) || undefined,
+          startDate: event.start_date as string,
+          endDate: event.end_date as string,
+          userEmails: users.map(u => u.email as string),
           pooledSpacesCount: companyData.spaces.length,
           companyName: companyData.company.name
         })
@@ -84,13 +91,13 @@ export async function scheduleEventNotifications(eventId: number) {
       }
 
       // Schedule reminder emails for each user (24 hours before event)
-      const reminderDate = new Date(event.start_date)
+      const reminderDate = new Date(event.start_date as string)
       reminderDate.setDate(reminderDate.getDate() - 1) // 24 hours before
 
       for (const user of users) {
         try {
-          await supabaseAdmin
-            .from('email_notifications')
+          await (adminSupabase ?? supabase)
+            ?.from('email_notifications')
             .insert({
               event_id: eventId,
               user_id: user.id,
@@ -125,11 +132,16 @@ export async function scheduleEventNotifications(eventId: number) {
 
 // Process pending email notifications (run this periodically)
 export async function processPendingNotifications() {
+  if (isBrowser) {
+    console.warn('Email/privileged ops are server-only; skipping in browser.');
+    return { processed: 0 };
+  }
+  
   try {
     const now = new Date().toISOString()
 
     // Get all unsent notifications that are due
-    const { data: notifications, error } = await supabaseAdmin
+    const { data: notifications, error } = await (adminSupabase ?? supabase)
       .from('email_notifications')
       .select(`
         *,
@@ -177,7 +189,7 @@ export async function processPendingNotifications() {
         }
 
         // Mark as sent
-        await supabaseAdmin
+        await (adminSupabase ?? supabase)
           .from('email_notifications')
           .update({ sent_at: new Date().toISOString() })
           .eq('id', notification.id)
@@ -199,16 +211,16 @@ export async function processPendingNotifications() {
 
 // Send welcome email to new user
 export async function sendUserWelcomeEmail(userId: string) {
+  if (isBrowser) {
+    console.warn('Email/privileged ops are server-only; skipping in browser.');
+    return { success: false };
+  }
+  
   try {
     // Get user details
     const { data: user, error: userError } = await supabase
       .from('user_profiles')
-      .select(`
-        *,
-        companies (
-          name
-        )
-      `)
+      .select('*')
       .eq('id', userId)
       .single()
 
@@ -216,16 +228,30 @@ export async function sendUserWelcomeEmail(userId: string) {
       throw new Error('User not found')
     }
 
+    // Get company name if user has a company
+    let companyName = null;
+    if (user.company_id) {
+      const { data: company } = await supabase
+        .from('companies')
+        .select('name')
+        .eq('id', user.company_id)
+        .single();
+      
+      companyName = company?.name;
+    }
+
     // Get email from auth.users
-    const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.getUserById(userId)
+    const { data: authUser, error: authError } = await (adminSupabase ?? supabase).auth.admin.getUserById(userId)
     
     if (authError || !authUser.user?.email) {
       throw new Error('User email not found')
     }
 
     await sendWelcomeEmail(
-      user.name,
-      user.companies?.name
+      String(user?.name ?? ''),
+      typeof companyName === 'string' && companyName.trim().length > 0
+        ? companyName
+        : 'No Company'
     )
 
     console.log(`Sent welcome email to ${user.name}`)
@@ -238,9 +264,14 @@ export async function sendUserWelcomeEmail(userId: string) {
 
 // Cancel event notifications
 export async function cancelEventNotifications(eventId: number) {
+  if (isBrowser) {
+    console.warn('Email/privileged ops are server-only; skipping in browser.');
+    return { success: false };
+  }
+  
   try {
     // Delete all unsent notifications for this event
-    const { error } = await supabaseAdmin
+    const { error } = await (adminSupabase ?? supabase)
       .from('email_notifications')
       .delete()
       .eq('event_id', eventId)

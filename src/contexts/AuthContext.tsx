@@ -2,6 +2,13 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User as SupabaseUser } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 
+function withTimeout<T>(p: PromiseLike<T>, ms = 5000): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`timeout ${ms}ms`)), ms);
+    p.then(v => { clearTimeout(t); resolve(v); }, e => { clearTimeout(t); reject(e); });
+  });
+}
+
 // Extended user type that includes profile data
 export interface ExtendedUser {
   id: string;
@@ -39,35 +46,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const getUserProfile = async (supabaseUser: SupabaseUser): Promise<ExtendedUser | null> => {
     try {
-      const { data: profile, error } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('id', supabaseUser.id)
-        .single();
+      const { data: profile, error } = await withTimeout<any>(
+        supabase
+          .from('user_profiles')
+          .select('*')
+          .eq('id', supabaseUser.id)
+          .single(),
+        5000
+      );
 
-      if (error) {
-        console.error('Error fetching user profile:', error);
-        return null;
-      }
-
-      if (!profile) {
-        console.error('No profile found for user');
-        return null;
+      if (error || !profile) {
+        console.warn('profiles fetch error:', error);
+        return {
+          id: supabaseUser.id,
+          email: supabaseUser.email ?? '',
+          name: supabaseUser.user_metadata?.name ?? 'User',
+          role: 'member' as const,
+          companyId: null,
+          status: 'active' as const,
+          createdAt: new Date().toISOString(),
+          invitedBy: null,
+          lastActiveAt: null,
+        } as ExtendedUser; // temporary minimal profile
       }
 
       return {
-        id: profile.id,
-        email: profile.email,
-        name: profile.name,
-        role: profile.role,
-        companyId: profile.company_id,
-        status: profile.status,
-        createdAt: profile.created_at,
-        invitedBy: profile.invited_by,
-        lastActiveAt: profile.last_active_at,
+        id: profile.id as string,
+        email: profile.email as string,
+        name: profile.name as string,
+        role: profile.role as 'global_admin' | 'company_admin' | 'member',
+        companyId: profile.company_id as number | null,
+        status: profile.status as 'active' | 'pending' | 'suspended',
+        createdAt: profile.created_at as string,
+        invitedBy: profile.invited_by as string | null,
+        lastActiveAt: profile.last_active_at as string | null,
       };
-    } catch (error) {
-      console.error('Error getting user profile:', error);
+    } catch (e) {
+      console.warn('profiles fetch timed out/failed:', e);
       return null;
     }
   };
@@ -141,41 +156,100 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   useEffect(() => {
-    // Get initial session
-    const getInitialSession = async () => {
+    let mounted = true;
+    setLoading(true);
+
+    // Get initial session with retry logic
+    async function getSessionWithRetry(maxAttempts = 3) {
+      let lastError: unknown = null;
+      
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        try {
+          console.log(`🔍 Getting initial session (attempt ${attempt + 1}/${maxAttempts})...`);
+          
+          const { data: { session }, error } = await supabase.auth.getSession();
+          
+          if (error) {
+            throw error;
+          }
+          
+          console.log('🔍 Session result:', session ? 'Found session' : 'No session');
+          return session;
+          
+        } catch (error) {
+          lastError = error;
+          console.warn(`⚠️ Session fetch attempt ${attempt + 1} failed:`, error);
+          
+          // Wait before retry (1s, 2s, 3s backoff)
+          if (attempt < maxAttempts - 1) {
+            await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+          }
+        }
+      }
+      
+      console.warn('❌ Initial session fetch failed after all attempts:', lastError);
+      return null;
+    }
+
+    // Initialize session
+    const initializeSession = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const session = await getSessionWithRetry(3);
+        
+        if (!mounted) return;
         
         if (session?.user) {
-          const profile = await getUserProfile(session.user);
-          setUser(profile);
+          console.log('🔍 Getting profile for session user...');
+          const profile = await withTimeout(getUserProfile(session.user), 5000);
+          if (mounted) {
+            setUser(profile);
+          }
+        } else {
+          if (mounted) {
+            setUser(null);
+          }
         }
       } catch (error) {
-        console.error('Error getting initial session:', error);
+        console.error('Initialization error:', error);
+        if (mounted) {
+          setUser(null);
+        }
       } finally {
-        setLoading(false);
+        if (mounted) {
+          setLoading(false);
+        }
       }
     };
 
-    getInitialSession();
+    initializeSession();
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('Auth state changed:', event);
-        
-        if (session?.user) {
-          const profile = await getUserProfile(session.user);
-          setUser(profile);
-        } else {
-          setUser(null);
+        if (!mounted) return;
+        // Ignore token refresh noise: don't refetch profile
+        if (event === 'TOKEN_REFRESHED' && !!session?.user) return;
+
+        setLoading(true);
+        try {
+          if (session?.user) {
+            console.log('🔍 Getting profile for auth change...');
+            const profile = await withTimeout(getUserProfile(session.user), 5000);
+            if (mounted) setUser(profile);
+          } else {
+            if (mounted) setUser(null);
+          }
+        } catch (e) {
+          console.error('❌ getUserProfile (auth change) failed or timed out:', e);
+          if (mounted) setUser(null);
+        } finally {
+          if (mounted) setLoading(false);
         }
-        
-        setLoading(false);
       }
     );
 
     return () => {
+      mounted = false;
       subscription.unsubscribe();
     };
   }, []);

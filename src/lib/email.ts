@@ -2,6 +2,7 @@
 import { Resend } from 'resend';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
+const IS_DRY_RUN = process.env.EMAIL_DRY_RUN === 'true';
 
 export interface EmailTemplate {
   to: string[];
@@ -68,6 +69,9 @@ export const generateEventCreatedEmail = (data: EventNotificationData): EmailTem
         </style>
     </head>
     <body>
+        <span style="display:none!important;visibility:hidden;opacity:0;height:0;width:0;overflow:hidden;">
+          A new ParkSpace event has been created for your company.
+        </span>
         <div class="container">
             <div class="header">
                 <h1>🅿️ ParkSpace</h1>
@@ -185,6 +189,9 @@ export const generateEventReminderEmail = (data: EventReminderData): EmailTempla
         </style>
     </head>
     <body>
+        <span style="display:none!important;visibility:hidden;opacity:0;height:0;width:0;overflow:hidden;">
+          Your ParkSpace event starts tomorrow—check your spaces.
+        </span>
         <div class="container">
             <div class="header">
                 <h1>🅿️ ParkSpace</h1>
@@ -285,6 +292,9 @@ export const generateWelcomeEmail = (userName: string, userEmail: string, compan
         </style>
     </head>
     <body>
+        <span style="display:none!important;visibility:hidden;opacity:0;height:0;width:0;overflow:hidden;">
+          Your ParkSpace account is ready—get started now.
+        </span>
         <div class="container">
             <div class="header">
                 <h1>🅿️ Welcome to ParkSpace!</h1>
@@ -322,34 +332,50 @@ export const generateWelcomeEmail = (userName: string, userEmail: string, compan
     </html>
   `;
 
+  const text = [
+    `Welcome to ParkSpace, ${userName}!`,
+    companyName ? `You've been added to ${companyName}.` : undefined,
+    `Manage vehicles, view spaces, and get event notifications.`,
+    `Get started: ${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}`
+  ].filter(Boolean).join('\n');
+
   return {
     to: [userEmail],
     subject,
-    html
+    html,
+    text
   };
 };
 
 // Main email sending functions
 export async function sendEmail(template: EmailTemplate) {
   try {
+    if (IS_DRY_RUN) {
+      console.log('🧪 DRY RUN — would send:', {
+        from: process.env.FROM_EMAIL || 'ParkSpace <onboarding@resend.dev>',
+        to: template.to,
+        subject: template.subject,
+        hasHtml: !!template.html,
+        hasText: !!template.text
+      });
+      return { data: null };
+    }
+
     const { data, error } = await resend.emails.send({
-      from: process.env.FROM_EMAIL || 'ParkSpace <onboarding@resend.dev>',
+      from: process.env.FROM_EMAIL || 'ParkSpace <cbv.parking@yakel.co.uk>',
+      replyTo: process.env.SUPPORT_EMAIL || 'cbv.parking@yakel.co.uk',
       to: template.to,
       subject: template.subject,
       html: template.html,
       text: template.text
     });
 
-    if (error) {
-      console.error('Error sending email:', error);
-      throw new Error(`Failed to send email: ${error.message}`);
-    }
-
-    console.log('Email sent successfully:', data);
+    if (error) throw new Error(error.message);
+    console.log('Email sent:', data);
     return data;
-  } catch (error) {
-    console.error('Email service error:', error);
-    throw error;
+  } catch (e) {
+    console.error('Email service error:', e);
+    throw e;
   }
 }
 

@@ -1,29 +1,32 @@
 // lib/supabase.ts
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import type { VehicleSpaceAssignment } from '../types'
 
-const supabaseUrl = process.env.REACT_APP_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+// ---- Public (browser) client: CRA only exposes REACT_APP_* at build time
+const PUBLIC_URL =
+  process.env.REACT_APP_SUPABASE_URL ?? '';
+const PUBLIC_ANON =
+  process.env.REACT_APP_SUPABASE_ANON_KEY ?? '';
 
-// Create a single client instance with proper configuration
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    storage: window.localStorage,
-    storageKey: 'parkspace-auth-v2', // Changed to clear old sessions
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: true
-  }
-})
+console.log('[Supabase env check]', {
+  hasUrl: !!PUBLIC_URL,
+  hasKey: !!PUBLIC_ANON,
+});
 
-// Server-side client with service role (for admin operations)
-const supabaseServiceRoleKey = process.env.REACT_APP_SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY!
+// Create the ONLY client used by the React app
+export const supabase = createClient(PUBLIC_URL, PUBLIC_ANON);
 
-export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false
-  }
-})
+// ---- Service-role (admin) client: NEVER create this in the browser
+// Guard behind env presence AND server/runtime (no window). Keep it optional.
+let adminSupabase: SupabaseClient | undefined = undefined;
+const SERVICE_ROLE =
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.REACT_APP_SUPABASE_SERVICE_ROLE_KEY; // allow local/dev if needed
+
+if (typeof window === 'undefined' && SERVICE_ROLE && PUBLIC_URL) {
+  adminSupabase = createClient(PUBLIC_URL, SERVICE_ROLE);
+}
+export { adminSupabase };
 
 // Database types based on our schema
 export interface Database {
@@ -404,15 +407,58 @@ export async function deleteVehicle(id: number) {
   if (error) throw error
 }
 
-// Vehicle Space Assignment operations
-export async function getVehicleSpaceAssignments() {
-  const { data, error } = await supabase
-    .from('current_vehicle_assignments')
-    .select('*')
-    .order('assigned_at', { ascending: false })
+// Raw PostgREST response type
+export type VehicleSpaceAssignmentRaw = {
+  assignment_id: number;
+  vehicle_id: number;
+  space_id: number;
+  assigned_at: string;
+  assigned_by: string | null;
+  notes: string | null;
+  ended_at?: string | null;
+  ended_by?: string | null;
+  vehicle_plate: string;
+  vehicle_description: string;
+  space_code: string;
+  assigned_by_name?: string;
+  company_name?: string;
+};
 
-  if (error) throw error
-  return data
+// Vehicle Space Assignment operations
+export async function getVehicleSpaceAssignments(): Promise<VehicleSpaceAssignment[]> {
+  try {
+    const { data, error } = await supabase
+      .from('current_vehicle_assignments')
+      .select('*')
+      .order('assigned_at', { ascending: false })
+
+    if (error) throw error
+    const rows = (data ?? []) as VehicleSpaceAssignmentRaw[]
+
+    // map snake_case -> camelCase here
+    return rows.map((a) => ({
+      id: a.assignment_id,
+      vehicleId: a.vehicle_id,
+      spaceId: a.space_id,
+      assignedAt: a.assigned_at,
+      assignedBy: a.assigned_by ?? null,
+      notes: a.notes ?? null,
+      status: 'active' as const,
+      endedAt: a.ended_at ?? null,
+      endedBy: a.ended_by ?? null,
+      vehiclePlate: a.vehicle_plate,
+      vehicleDescription: a.vehicle_description,
+      spaceCode: a.space_code,
+      assignedByName: a.assigned_by_name,
+      companyName: a.company_name,
+    }))
+  } catch (e: any) {
+    if (e?.code === 'PGRST205' || e?.status === 404 || (e?.message ?? '').includes('PGRST205')) {
+      console.warn('Missing current_vehicle_assignments — returning [].')
+      return []
+    }
+    throw e
+  }
 }
 
 export async function assignVehicleToSpace(vehicleId: number, spaceId: number, notes?: string) {
