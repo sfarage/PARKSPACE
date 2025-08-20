@@ -1,4 +1,4 @@
-// Cloudflare Pages Function: /api/send-email
+// /functions/api/send-email.js
 function cors() {
   return {
     'content-type': 'application/json',
@@ -15,7 +15,7 @@ export const onRequestPost = async ({ request, env }) => {
   try {
     const body = await request.json(); // { to: string[], subject: string, html: string, text?: string }
 
-    // DRY-RUN in environments without the secret (e.g. Preview)
+    // DRY-RUN in environments without the secret (e.g., Preview)
     if (!env.RESEND_API_KEY) {
       return new Response(JSON.stringify({ ok: true, dryRun: true, body }), {
         status: 200,
@@ -29,7 +29,7 @@ export const onRequestPost = async ({ request, env }) => {
     const resp = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${env.RESEND_API_KEY}`,
+        Authorization: `Bearer ${env.RESEND_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -38,7 +38,6 @@ export const onRequestPost = async ({ request, env }) => {
         subject: body.subject,
         html: body.html,
         text: body.text,
-        // Resend HTTP API expects snake_case for reply_to
         ...(replyTo ? { reply_to: replyTo } : {}),
       }),
     });
