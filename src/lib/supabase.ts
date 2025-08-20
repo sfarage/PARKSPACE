@@ -12,6 +12,11 @@ const SUPABASE_ANON_KEY =
   process.env.SUPABASE_ANON_KEY || // fallback if you ever run server-side
   '';
 
+console.log('[Supabase env check]', {
+  hasUrl: !!(process.env.REACT_APP_SUPABASE_URL),
+  hasKey: !!(process.env.REACT_APP_SUPABASE_ANON_KEY)
+});
+
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   // Log a friendly error instead of a cryptic crash
   console.error('Missing Supabase env vars. Set REACT_APP_SUPABASE_URL and REACT_APP_SUPABASE_ANON_KEY.');
