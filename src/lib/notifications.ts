@@ -69,11 +69,11 @@ export async function scheduleEventNotifications(eventId: number) {
       // Send immediate event creation notification
       try {
         await sendEventCreatedNotification({
-          eventName: event.name,
-          eventDescription: event.description || undefined,
-          startDate: event.start_date,
-          endDate: event.end_date,
-          userEmails: users.map(u => u.email),
+          eventName: event.name as string,
+          eventDescription: (event.description as string) || undefined,
+          startDate: event.start_date as string,
+          endDate: event.end_date as string,
+          userEmails: users.map(u => u.email as string),
           pooledSpacesCount: companyData.spaces.length,
           companyName: companyData.company.name
         })
@@ -84,7 +84,7 @@ export async function scheduleEventNotifications(eventId: number) {
       }
 
       // Schedule reminder emails for each user (24 hours before event)
-      const reminderDate = new Date(event.start_date)
+      const reminderDate = new Date(event.start_date as string)
       reminderDate.setDate(reminderDate.getDate() - 1) // 24 hours before
 
       for (const user of users) {
@@ -203,17 +203,24 @@ export async function sendUserWelcomeEmail(userId: string) {
     // Get user details
     const { data: user, error: userError } = await supabase
       .from('user_profiles')
-      .select(`
-        *,
-        companies (
-          name
-        )
-      `)
+      .select('*')
       .eq('id', userId)
       .single()
 
     if (userError || !user) {
       throw new Error('User not found')
+    }
+
+    // Get company name if user has a company
+    let companyName = null;
+    if (user.company_id) {
+      const { data: company } = await supabase
+        .from('companies')
+        .select('name')
+        .eq('id', user.company_id)
+        .single();
+      
+      companyName = company?.name;
     }
 
     // Get email from auth.users
@@ -224,8 +231,10 @@ export async function sendUserWelcomeEmail(userId: string) {
     }
 
     await sendWelcomeEmail(
-      user.name,
-      user.companies?.name
+      String(user?.name ?? ''),
+      typeof companyName === 'string' && companyName.trim().length > 0
+        ? companyName
+        : 'No Company'
     )
 
     console.log(`Sent welcome email to ${user.name}`)

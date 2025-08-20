@@ -72,99 +72,90 @@ function AppContent() {
         .select('*');
       
       // Load vehicle space assignments
-      const assignmentsData = await getVehicleSpaceAssignments();
+      let assignments: VehicleSpaceAssignment[] = [];
+      try {
+        assignments = await getVehicleSpaceAssignments();
+      } catch (error: any) {
+        if (error?.code === 'PGRST205' || (error?.message ?? '').includes('PGRST205')) {
+          console.warn('Missing table current_vehicle_assignments — rendering without it.');
+        } else {
+          console.error('Error loading vehicle assignments:', error);
+        }
+        assignments = [];
+      }
+      setAssignments(assignments);
 
       // Transform data to match existing interfaces
       setCompanies(companiesData?.map(c => ({
-        id: c.id,
-        name: c.name,
-        createdAt: c.created_at,
-        userCount: c.user_count || 0,
-        spaceCount: c.space_count || 0
+        id: c.id as number,
+        name: c.name as string,
+        createdAt: c.created_at as string,
+        userCount: (c.user_count as number) || 0,
+        spaceCount: (c.space_count as number) || 0
       })) || []);
 
-      // Transform assignments data
-      const assignmentsTransformed: VehicleSpaceAssignment[] = assignmentsData?.map(a => ({
-        id: a.assignment_id,
-        vehicleId: a.vehicle_id,
-        spaceId: a.space_id,
-        assignedAt: a.assigned_at,
-        assignedBy: a.assigned_by,
-        notes: a.notes,
-        status: 'active',
-        endedAt: null,
-        endedBy: null,
-        vehiclePlate: a.vehicle_plate,
-        vehicleDescription: a.vehicle_description,
-        spaceCode: a.space_code,
-        assignedByName: a.assigned_by_name,
-        companyName: a.company_name
-      })) || [];
-
-      setAssignments(assignmentsTransformed);
-
       setSpaces(spacesData?.map(s => {
-        const assignment = assignmentsTransformed.find(a => a.spaceId === s.id);
+        const assignment = assignments.find(a => a.spaceId === s.id);
         return {
-          id: s.id,
-          code: s.code,
-          block: s.block,
-          number: s.number,
-          companyId: s.company_id,
-          assignedAt: s.assigned_at,
-          status: s.status,
+          id: s.id as number,
+          code: s.code as string,
+          block: s.block as string,
+          number: s.number as string,
+          companyId: s.company_id as number | null,
+          assignedAt: s.assigned_at as string | null,
+          status: s.status as 'available' | 'occupied' | 'reserved',
           currentAssignment: assignment
         };
       }) || []);
 
       setVehicles(vehiclesData?.map(v => {
-        const assignment = assignmentsTransformed.find(a => a.vehicleId === v.id);
+        const assignment = assignments.find(a => a.vehicleId === v.id);
         return {
-          id: v.id,
-          plate: v.plate,
-          make: v.make,
-          model: v.model,
-          color: v.color,
-          type: v.type,
-          userId: parseInt(v.user_id),
-          companyId: v.company_id,
-          addedAt: v.added_at,
+          id: v.id as number,
+          plate: v.plate as string,
+          make: v.make as string,
+          model: v.model as string,
+          color: v.color as string,
+          type: v.type as string,
+          userId: parseInt(v.user_id as string),
+          companyId: v.company_id as number,
+          addedAt: v.added_at as string,
           currentAssignment: assignment
         };
       }) || []);
 
       setUsers(usersData?.map(u => ({
-        id: u.id,
-        name: u.name,
-        email: u.email,
-        role: u.role,
-        companyId: u.company_id,
-        status: u.status,
-        createdAt: u.created_at,
-        invitedBy: u.invited_by,
-        lastActiveAt: u.last_active_at,
-        lastActivity: u.last_active_at ? new Date(u.last_active_at).toISOString().split('T')[0] : 'Never',
-        joinedAt: new Date(u.created_at).toISOString().split('T')[0]
+        id: u.id as string,
+        name: u.name as string,
+        email: u.email as string,
+        role: u.role as 'global_admin' | 'company_admin' | 'member',
+        companyId: u.company_id as number | null,
+        status: u.status as 'active' | 'pending' | 'suspended',
+        createdAt: u.created_at as string,
+        invitedBy: u.invited_by as string | null,
+        lastActiveAt: u.last_active_at as string | null,
+        lastActivity: u.last_active_at ? new Date(u.last_active_at as string).toISOString().split('T')[0] : 'Never',
+        joinedAt: new Date(u.created_at as string).toISOString().split('T')[0]
       })) || []);
 
       setEvents(eventsData?.map(e => ({
-        id: e.id,
-        name: e.name,
-        description: e.description || '',
-        startDate: e.start_date,
-        endDate: e.end_date,
-        status: e.status,
-        createdAt: e.created_at,
-        createdBy: parseInt(e.created_by || '0')
+        id: e.id as number,
+        name: e.name as string,
+        description: (e.description as string) || '',
+        startDate: e.start_date as string,
+        endDate: e.end_date as string,
+        status: e.status as 'draft' | 'active' | 'completed' | 'cancelled',
+        createdAt: e.created_at as string,
+        createdBy: parseInt((e.created_by as string) || '0')
       })) || []);
 
       setEventPools(eventPoolsData?.map(ep => ({
-        id: ep.id,
-        eventId: ep.event_id,
-        spaceId: ep.space_id,
-        companyId: ep.company_id,
-        pooledBy: parseInt(ep.pooled_by || '0'),
-        pooledAt: ep.pooled_at
+        id: ep.id as number,
+        eventId: ep.event_id as number,
+        spaceId: ep.space_id as number,
+        companyId: ep.company_id as number,
+        pooledBy: parseInt((ep.pooled_by as string) || '0'),
+        pooledAt: ep.pooled_at as string
       })) || []);
 
     } catch (error) {
@@ -191,9 +182,9 @@ function AppContent() {
       if (error) throw error;
 
       const newCompany: Company = {
-        id: data.id,
-        name: data.name,
-        createdAt: data.created_at,
+        id: data.id as number,
+        name: data.name as string,
+        createdAt: data.created_at as string,
         userCount: 0,
         spaceCount: 0
       };
