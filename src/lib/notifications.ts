@@ -1,9 +1,16 @@
 // lib/notifications.ts
-import { supabase, supabaseAdmin } from './supabase'
+import { supabase, (adminSupabase ?? supabase) } from './supabase'
 import { sendEventCreatedNotification, sendEventReminder, sendWelcomeEmail } from './email'
+
+const isBrowser = typeof window !== 'undefined';
 
 // Schedule email notifications for an event
 export async function scheduleEventNotifications(eventId: number) {
+  if (isBrowser) {
+    console.warn('Email/privileged ops are server-only; skipping in browser.');
+    return;
+  }
+  
   try {
     // Get event details
     const { data: event, error: eventError } = await supabase
@@ -89,8 +96,8 @@ export async function scheduleEventNotifications(eventId: number) {
 
       for (const user of users) {
         try {
-          await supabaseAdmin
-            .from('email_notifications')
+          await (adminSupabase ?? supabase)
+            ?.from('email_notifications')
             .insert({
               event_id: eventId,
               user_id: user.id,
@@ -125,11 +132,16 @@ export async function scheduleEventNotifications(eventId: number) {
 
 // Process pending email notifications (run this periodically)
 export async function processPendingNotifications() {
+  if (isBrowser) {
+    console.warn('Email/privileged ops are server-only; skipping in browser.');
+    return { processed: 0 };
+  }
+  
   try {
     const now = new Date().toISOString()
 
     // Get all unsent notifications that are due
-    const { data: notifications, error } = await supabaseAdmin
+    const { data: notifications, error } = await (adminSupabase ?? supabase)
       .from('email_notifications')
       .select(`
         *,
@@ -177,7 +189,7 @@ export async function processPendingNotifications() {
         }
 
         // Mark as sent
-        await supabaseAdmin
+        await (adminSupabase ?? supabase)
           .from('email_notifications')
           .update({ sent_at: new Date().toISOString() })
           .eq('id', notification.id)
@@ -199,6 +211,11 @@ export async function processPendingNotifications() {
 
 // Send welcome email to new user
 export async function sendUserWelcomeEmail(userId: string) {
+  if (isBrowser) {
+    console.warn('Email/privileged ops are server-only; skipping in browser.');
+    return { success: false };
+  }
+  
   try {
     // Get user details
     const { data: user, error: userError } = await supabase
@@ -224,7 +241,7 @@ export async function sendUserWelcomeEmail(userId: string) {
     }
 
     // Get email from auth.users
-    const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.getUserById(userId)
+    const { data: authUser, error: authError } = await (adminSupabase ?? supabase).auth.admin.getUserById(userId)
     
     if (authError || !authUser.user?.email) {
       throw new Error('User email not found')
@@ -247,9 +264,14 @@ export async function sendUserWelcomeEmail(userId: string) {
 
 // Cancel event notifications
 export async function cancelEventNotifications(eventId: number) {
+  if (isBrowser) {
+    console.warn('Email/privileged ops are server-only; skipping in browser.');
+    return { success: false };
+  }
+  
   try {
     // Delete all unsent notifications for this event
-    const { error } = await supabaseAdmin
+    const { error } = await (adminSupabase ?? supabase)
       .from('email_notifications')
       .delete()
       .eq('event_id', eventId)

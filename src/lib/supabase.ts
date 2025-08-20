@@ -1,57 +1,32 @@
 // lib/supabase.ts
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { VehicleSpaceAssignment } from '../types'
 
-const SUPABASE_URL =
-  process.env.REACT_APP_SUPABASE_URL ||
-  process.env.SUPABASE_URL || // fallback if you ever run server-side
-  '';
-
-const SUPABASE_ANON_KEY =
-  process.env.REACT_APP_SUPABASE_ANON_KEY ||
-  process.env.SUPABASE_ANON_KEY || // fallback if you ever run server-side
-  '';
+// ---- Public (browser) client: CRA only exposes REACT_APP_* at build time
+const PUBLIC_URL =
+  process.env.REACT_APP_SUPABASE_URL ?? '';
+const PUBLIC_ANON =
+  process.env.REACT_APP_SUPABASE_ANON_KEY ?? '';
 
 console.log('[Supabase env check]', {
-  hasUrl: !!(process.env.REACT_APP_SUPABASE_URL),
-  hasKey: !!(process.env.REACT_APP_SUPABASE_ANON_KEY)
+  hasUrl: !!PUBLIC_URL,
+  hasKey: !!PUBLIC_ANON,
 });
 
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  // Log a friendly error instead of a cryptic crash
-  console.error('Missing Supabase env vars. Set REACT_APP_SUPABASE_URL and REACT_APP_SUPABASE_ANON_KEY.');
+// Create the ONLY client used by the React app
+export const supabase = createClient(PUBLIC_URL, PUBLIC_ANON);
+
+// ---- Service-role (admin) client: NEVER create this in the browser
+// Guard behind env presence AND server/runtime (no window). Keep it optional.
+let adminSupabase: SupabaseClient | undefined = undefined;
+const SERVICE_ROLE =
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.REACT_APP_SUPABASE_SERVICE_ROLE_KEY; // allow local/dev if needed
+
+if (typeof window === 'undefined' && SERVICE_ROLE && PUBLIC_URL) {
+  adminSupabase = createClient(PUBLIC_URL, SERVICE_ROLE);
 }
-
-// Ensure we only create one client instance
-let _supabase: ReturnType<typeof createClient> | null = null;
-
-function getSupabaseClient() {
-  if (!_supabase) {
-    _supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      auth: {
-        storage: window.localStorage,
-        storageKey: 'parkspace-auth-v3', // New storage key to clear conflicts
-        autoRefreshToken: true,
-        persistSession: true,
-        detectSessionInUrl: true
-      }
-    });
-  }
-  return _supabase;
-}
-
-// Export the singleton client
-export const supabase = getSupabaseClient();
-
-// Server-side client with service role (for admin operations)
-const supabaseServiceRoleKey = process.env.REACT_APP_SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY!
-
-export const supabaseAdmin = createClient(SUPABASE_URL, supabaseServiceRoleKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false
-  }
-})
+export { adminSupabase };
 
 // Database types based on our schema
 export interface Database {
