@@ -1,5 +1,5 @@
 // lib/notifications.ts
-import { supabase, (adminSupabase ?? supabase) } from './supabase'
+import { supabase, adminSupabase } from './supabase'
 import { sendEventCreatedNotification, sendEventReminder, sendWelcomeEmail } from './email'
 
 const isBrowser = typeof window !== 'undefined';
