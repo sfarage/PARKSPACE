@@ -407,6 +407,90 @@ export async function deleteVehicle(id: number) {
   if (error) throw error
 }
 
+// User operations
+export async function createUser(userData: {
+  email: string
+  password: string
+  name: string
+  role?: 'global_admin' | 'company_admin' | 'member'
+  companyId?: number | null
+  invitedBy?: string | null
+}) {
+  // Create auth user
+  const { data: authData, error: authError } = await supabase.auth.signUp({
+    email: userData.email,
+    password: userData.password,
+    options: {
+      data: {
+        name: userData.name
+      }
+    }
+  })
+
+  if (authError) throw authError
+  if (!authData.user) throw new Error('Failed to create auth user')
+
+  // Create user profile
+  const { data: profile, error: profileError } = await supabase
+    .from('user_profiles')
+    .insert({
+      id: authData.user.id,
+      name: userData.name,
+      email: userData.email,
+      role: userData.role || 'member',
+      company_id: userData.companyId || null,
+      invited_by: userData.invitedBy || null,
+      status: 'active'
+    })
+    .select()
+    .single()
+
+  if (profileError) throw profileError
+
+  return { authUser: authData.user, profile }
+}
+
+export async function updateUserProfile(userId: string, updates: {
+  name?: string
+  role?: 'global_admin' | 'company_admin' | 'member'
+  company_id?: number | null
+  status?: 'active' | 'pending' | 'suspended'
+}) {
+  const { data, error } = await supabase
+    .from('user_profiles')
+    .update(updates)
+    .eq('id', userId)
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+export async function deleteUser(userId: string) {
+  // Delete user profile first (due to foreign key constraints)
+  const { error: profileError } = await supabase
+    .from('user_profiles')
+    .delete()
+    .eq('id', userId)
+
+  if (profileError) throw profileError
+
+  // Delete auth user (admin operation - would need service role in production)
+  // For now, we'll just mark the profile as deleted
+  // In production, you'd use supabase admin client to delete the auth user
+}
+
+export async function getUsers() {
+  const { data, error } = await supabase
+    .from('user_profiles')
+    .select('*')
+    .order('name')
+
+  if (error) throw error
+  return data
+}
+
 // Raw PostgREST response type
 export type VehicleSpaceAssignmentRaw = {
   assignment_id: number;

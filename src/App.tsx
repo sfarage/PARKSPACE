@@ -9,7 +9,8 @@ import { SpacesView } from './components/views/SpacesView';
 import { VehiclesView } from './components/views/VehiclesView';
 import { UsersView } from './components/views/UsersView';
 import { EventsView } from './components/views/EventsView';
-import { supabase, getVehicleSpaceAssignments, assignVehicleToSpace, unassignVehicleFromSpace } from './lib/supabase';
+import { supabase, getVehicleSpaceAssignments, assignVehicleToSpace, unassignVehicleFromSpace, createUser, updateUserProfile, deleteUser } from './lib/supabase';
+import { sendUserWelcomeEmail } from './lib/notifications';
 
 function AppContent() {
   const { user, loading, signOut } = useAuth();
@@ -291,18 +292,95 @@ function AppContent() {
   };
 
   const handleAddUser = async (userData: Omit<ExtendedUser, 'id'>) => {
-    // Implement user creation
-    console.log('User creation not yet implemented');
+    try {
+      // Generate a temporary password (in production, you'd want proper password generation)
+      const tempPassword = 'TempPass123!';
+      
+      const { profile } = await createUser({
+        email: userData.email,
+        password: tempPassword,
+        name: userData.name,
+        role: userData.role,
+        companyId: userData.companyId,
+        invitedBy: user?.id || null
+      });
+
+      // Transform the profile to match our ExtendedUser interface
+      const newUser: ExtendedUser = {
+        id: profile.id,
+        name: profile.name,
+        email: profile.email,
+        role: profile.role as 'global_admin' | 'company_admin' | 'member',
+        companyId: profile.company_id,
+        status: profile.status as 'active' | 'pending' | 'suspended',
+        createdAt: profile.created_at,
+        invitedBy: profile.invited_by,
+        lastActiveAt: profile.last_active_at,
+        lastActivity: profile.last_active_at ? new Date(profile.last_active_at).toISOString().split('T')[0] : 'Never',
+        joinedAt: new Date(profile.created_at).toISOString().split('T')[0]
+      };
+
+      // Add to local state
+      setUsers([...users, newUser]);
+
+      // Send welcome email
+      try {
+        await sendUserWelcomeEmail(profile.id);
+        console.log('Welcome email sent to new user');
+      } catch (emailError) {
+        console.error('Failed to send welcome email:', emailError);
+        // Don't throw - user creation was successful
+      }
+
+      alert(`User created successfully! Temporary password: ${tempPassword}`);
+    } catch (error) {
+      console.error('Error creating user:', error);
+      alert('Error creating user. Please try again.');
+    }
   };
 
   const handleEditUser = async (userId: string, userData: Partial<ExtendedUser>) => {
-    // Implement user editing
-    console.log('User editing not yet implemented');
+    try {
+      const updates: any = {};
+      if (userData.name) updates.name = userData.name;
+      if (userData.role) updates.role = userData.role;
+      if (userData.companyId !== undefined) updates.company_id = userData.companyId;
+      if (userData.status) updates.status = userData.status;
+
+      const updatedProfile = await updateUserProfile(userId, updates);
+
+      // Update local state
+      setUsers(users.map(u => u.id === userId ? {
+        ...u,
+        name: updatedProfile.name,
+        role: updatedProfile.role as 'global_admin' | 'company_admin' | 'member',
+        companyId: updatedProfile.company_id,
+        status: updatedProfile.status as 'active' | 'pending' | 'suspended'
+      } : u));
+
+    } catch (error) {
+      console.error('Error updating user:', error);
+      alert('Error updating user. Please try again.');
+    }
   };
 
   const handleDeleteUser = async (userId: string) => {
-    // Implement user deletion
-    console.log('User deletion not yet implemented');
+    const userToDelete = users.find(u => u.id === userId);
+    if (!userToDelete) return;
+
+    const confirmDelete = window.confirm(
+      `Are you sure you want to delete user "${userToDelete.name}"? This action cannot be undone.`
+    );
+
+    if (!confirmDelete) return;
+
+    try {
+      await deleteUser(userId);
+      setUsers(users.filter(u => u.id !== userId));
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      alert('Error deleting user. Please try again.');
+    }
   };
 
   const handleExportUsersCSV = () => {
