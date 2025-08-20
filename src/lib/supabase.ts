@@ -2,15 +2,27 @@
 import { createClient } from '@supabase/supabase-js'
 import type { VehicleSpaceAssignment } from '../types'
 
-const supabaseUrl = process.env.REACT_APP_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+const SUPABASE_URL =
+  process.env.REACT_APP_SUPABASE_URL ||
+  process.env.SUPABASE_URL || // fallback if you ever run server-side
+  '';
+
+const SUPABASE_ANON_KEY =
+  process.env.REACT_APP_SUPABASE_ANON_KEY ||
+  process.env.SUPABASE_ANON_KEY || // fallback if you ever run server-side
+  '';
+
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  // Log a friendly error instead of a cryptic crash
+  console.error('Missing Supabase env vars. Set REACT_APP_SUPABASE_URL and REACT_APP_SUPABASE_ANON_KEY.');
+}
 
 // Ensure we only create one client instance
 let _supabase: ReturnType<typeof createClient> | null = null;
 
 function getSupabaseClient() {
   if (!_supabase) {
-    _supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    _supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       auth: {
         storage: window.localStorage,
         storageKey: 'parkspace-auth-v3', // New storage key to clear conflicts
@@ -29,7 +41,7 @@ export const supabase = getSupabaseClient();
 // Server-side client with service role (for admin operations)
 const supabaseServiceRoleKey = process.env.REACT_APP_SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY!
 
-export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey, {
+export const supabaseAdmin = createClient(SUPABASE_URL, supabaseServiceRoleKey, {
   auth: {
     autoRefreshToken: false,
     persistSession: false
